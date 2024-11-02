@@ -9,18 +9,18 @@ from .basicstage import BasicStage, SamplePair
 from ...utils import run_command
 
 DNA_COLUMNS = {
-    'dna_chr': str, 'dna_bgn': np.uint32, 'dna_end': np.uint32,
+    'dna_chr': str, 'dna_start': np.uint32, 'dna_end': np.uint32,
     'id': str, 'dna_score': np.uint16, 'dna_strand': str, 'dna_cigar': str
 }
 
 RNA_COLUMNS = {
-    'rna_chr': str, 'rna_bgn': np.uint32, 'rna_end': np.uint32,
+    'rna_chr': str, 'rna_start': np.uint32, 'rna_end': np.uint32,
     'id': str, 'rna_score': np.uint16, 'rna_strand': str, 'rna_cigar': str
 }
 
 TAB_HEADER = (
-    'rna_chr', 'rna_bgn', 'rna_end', 'id', 'rna_strand', 'rna_cigar',
-    'dna_chr', 'dna_bgn', 'dna_end', 'dna_strand', 'dna_cigar'
+    'rna_chr', 'rna_start', 'rna_end', 'id', 'rna_strand', 'rna_cigar',
+    'dna_chr', 'dna_start', 'dna_end', 'dna_strand', 'dna_cigar'
 )
 
 
@@ -34,7 +34,7 @@ def _process_id(read_id: str) -> str:
 @dataclass
 class BedRow:
     chr: str
-    bgn: str
+    start: str
     end: str
     id: str
     score: str
@@ -55,12 +55,12 @@ class BedRow:
 
     def to_rna(self) -> str:
         return '\t'.join(
-            (self.chr, self.bgn, self.end, self.id, self.strand, self.cigar)
+            (self.chr, self.start, self.end, self.id, self.strand, self.cigar)
         )
     
     def to_dna(self) -> str:
         return '\t'.join(
-            (self.chr, self.bgn, self.end, self.strand, self.cigar)
+            (self.chr, self.start, self.end, self.strand, self.cigar)
         )
 
 

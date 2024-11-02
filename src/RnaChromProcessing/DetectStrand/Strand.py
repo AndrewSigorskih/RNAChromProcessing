@@ -15,8 +15,8 @@ from ..utils import (
 from ..utils.run_utils import VERBOSE
 from ..plots import rna_strand_barplot, rna_strand_boxplot, set_style_white
 
-CONTACTS_COLS = ('rna_chr', 'rna_bgn', 'rna_end', 'rna_strand')
-CONTACTS_BED_COLS = ('rna_chr', 'rna_bgn', 'rna_end', 'name', 'score', 'rna_strand')
+CONTACTS_COLS = ('rna_chr', 'rna_start', 'rna_end', 'rna_strand')
+CONTACTS_BED_COLS = ('rna_chr', 'rna_start', 'rna_end', 'name', 'score', 'rna_strand')
 BED_COLS = ('chr', 'start', 'end', 'name', 'score', 'strand')
 GTF_COLS = ('chr', 'type', 'start', 'end', 'strand', 'attrs')
 
