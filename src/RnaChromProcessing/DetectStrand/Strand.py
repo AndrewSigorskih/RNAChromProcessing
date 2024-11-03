@@ -12,26 +12,19 @@ from pydantic import BaseModel, PositiveInt, field_validator
 from ..utils import (
     check_file_exists, exit_with_error, find_in_list, run_command
 )
+from ..utils.parsing import fetch_genes_from_bedrc, fetch_genes_from_gtf
 from ..utils.run_utils import VERBOSE
 from ..plots import rna_strand_barplot, rna_strand_boxplot, set_style_white
 
 CONTACTS_COLS = ('rna_chr', 'rna_start', 'rna_end', 'rna_strand')
 CONTACTS_BED_COLS = ('rna_chr', 'rna_start', 'rna_end', 'name', 'score', 'rna_strand')
 BED_COLS = ('chr', 'start', 'end', 'name', 'score', 'strand')
-GTF_COLS = ('chr', 'type', 'start', 'end', 'strand', 'attrs')
 
 CHUNKSIZE = 10_000_000
-GENE_ID_PAT = re.compile(r'(?<=gene_id \")[^\"]+(?=\";)')
-GENE_NAME_PAT = re.compile(r'(?<=gene_name \")[^\"]+(?=\";)')
+
 
 logger = logging.getLogger('strand')
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
-
-
-def _read_name_or_id(s: str) -> str:
-    # will throw exception if both attrs ase absent (invalid annotation)
-    capture = re.search(GENE_NAME_PAT, s) or re.search(GENE_ID_PAT, s)
-    return capture.group(0)
 
 
 def _contacts_to_bed(inp_file: Path, prep_file: Path) -> None:
@@ -69,7 +62,7 @@ class DetectStrand(BaseModel):
     cpus: PositiveInt = 1
     plots_format: Literal['png', 'svg'] = 'png'
 
-    gtf_annotation: Path
+    gene_annotation: Path
     genes_list: Path
 
     def __init__(self,
@@ -92,7 +85,7 @@ class DetectStrand(BaseModel):
     def resolve_path(cls, pth: str) -> Path:
         return Path(pth).resolve()
     
-    @field_validator('gtf_annotation', 'genes_list')
+    @field_validator('gene_annotation', 'genes_list')
     @classmethod
     def check_files(cls, pth: str) -> Path:
         check_file_exists(pth)
@@ -106,29 +99,20 @@ class DetectStrand(BaseModel):
         self.output_dir.mkdir(parents=True, exist_ok=True)
     
     def __load_genes(self) -> Path:
-        # load lene names
-        with open(self.genes_list, 'r') as f:
-            # will search for gene_name "DDX11L2"; OR gene_id "ENSG00000290825.1"; for all listed genes
-            genes_list: str = '|'.join([f'"{line.strip()}";' for line in f])
-        # load annotation and extract selected genes
-        gene_annot = pd.read_csv(
-            self.gtf_annotation, sep='\t', header=None, skiprows=5,
-            usecols=[0,2,3,4,6,8], names=GTF_COLS
-        )
-        gene_annot = gene_annot[gene_annot['type'] == 'gene']
-        gene_annot = gene_annot[gene_annot['attrs'].str.contains(genes_list)]
-        if not (shape := gene_annot.shape[0]):
-            exit_with_error('Could not find any of the listed genes in annotation file!')
+        # fetch genes from annotation file
+        file_ext = self.gene_annotation.suffix
+        if file_ext == '.gtf':
+            gene_annot = fetch_genes_from_gtf(self.gene_annotation, self.genes_list)
+        elif file_ext == '.bedrc':
+            gene_annot = fetch_genes_from_bedrc(self.gene_annotation, self.genes_list)
         else:
-            logger.info(f'{shape} genes selected from annotation file.')
-        # save annotation as tmp bed file
-        try:
-            gene_annot['name'] = gene_annot['attrs'].apply(_read_name_or_id)
-        except AttributeError:
             exit_with_error(
-                'GTF annotation should have "gene_name" or "gene_id" attribute '
-                ' for "gene" type records!'
+                f"Unknown gene annotation format: {file_ext}! "
+                "Supported formats: gtf, bedrc."
             )
+        logger.info(f'{gene_annot.shape[0]} genes selected from annotation file.')
+
+        # save annotation as tmp bed file
         gene_annot['score'] = 100
         self._gene_names = gene_annot['name'].values
         self._bed_annot = self._work_pth / 'annotation.bed'

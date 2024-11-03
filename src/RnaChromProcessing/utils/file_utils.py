@@ -2,7 +2,7 @@ import gzip
 import shutil
 import os
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
 from .errors import exit_with_error
 
@@ -19,22 +19,6 @@ def gzip_file(src: str, dst: str, remove_src=True) -> None:
         shutil.copyfileobj(infile, outfile)
     if remove_src:
         os.remove(src)
-
-
-def load_config(path: str) -> Dict:
-    """loads config file in json or yaml format"""
-    check_file_exists(path)
-    with open(path, 'r') as f:
-        if path.endswith('.json'):
-            import json
-            config = json.load(f)
-        elif path.endswith('.yml') or path.endswith('.yaml'):
-            import yaml
-            config = yaml.safe_load(f)
-        else:
-            msg = f'Unknown config file extension: {path}. Only json and yml/yaml formats are supported!'
-            exit_with_error(msg)
-    return config
 
 
 def make_directory(path: str, exist_ok: bool = True) -> None:

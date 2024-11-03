@@ -1,6 +1,6 @@
 input_dir: results/contacts
 output_dir: strand
-gtf_annotation: /gpfs/asigorskikh/data/genes/gencode.vM32.annotation.gtf
+gene_annotation: /gpfs/asigorskikh/data/genes/gencode.vM32.annotation.gtf
 genes_list: /gpfs/asigorskikh/soft/RNAChrom_ALLvsALL_data_processing/configs/strand/gencode_vM32_rpl_genes.txt
 prefix: mouse_strand_test
 cpus: 5

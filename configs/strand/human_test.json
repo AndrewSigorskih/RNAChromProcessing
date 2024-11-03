@@ -1,7 +1,7 @@
 {
     "input_dir": "results/contacts",
     "output_dir": "output_strand",
-    "gtf_annotation": "/mnt/lustre/asigorskikh/rnachrom/test_processing/data/genes/gencode.v43.annotation.gtf",
+    "gene_annotation": "/mnt/lustre/asigorskikh/rnachrom/test_processing/data/genes/gencode.v43.annotation.gtf",
     "genes_list": "/mnt/lustre/asigorskikh/rnachrom/RNAChrom_ALLvsALL_data_processing/configs/strand/gencode_v43_rpl_genes.txt",
     "prefix": "human_strand",
     "exp_groups": {
