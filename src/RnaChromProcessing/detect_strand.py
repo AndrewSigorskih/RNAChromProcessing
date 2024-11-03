@@ -1,7 +1,8 @@
 import argparse
 import logging
+from pathlib import Path
 
-from .DetectStrand import DetectStrand
+from .DetectStrand import DetectStrand, merge_tables
 from .utils import configure_logger, load_config
 
 logger = logging.getLogger('strand')
@@ -27,6 +28,16 @@ def main() -> None:
 
     config = load_config(args.config)
     DetectStrand(**config).run()
+
+
+def merge() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--inputs', required=True,
+                        nargs='+', type=Path, help='''Input file(s).''')
+    parser.add_argument('-o', '--output', required=True,
+                        type=Path, help='''Output file.''')
+    args = parser.parse_args()
+    merge_tables(args.inputs, args.output)
 
 
 if __name__ == '__main__':
