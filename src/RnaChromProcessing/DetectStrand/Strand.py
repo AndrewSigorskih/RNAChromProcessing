@@ -1,6 +1,5 @@
 import concurrent.futures
 import logging
-import re
 from os import chdir, listdir, symlink
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -18,6 +17,7 @@ from ..plots import rna_strand_barplot, rna_strand_boxplot, set_style_white
 
 CONTACTS_COLS = ('rna_chr', 'rna_start', 'rna_end', 'rna_strand')
 CONTACTS_BED_COLS = ('rna_chr', 'rna_start', 'rna_end', 'name', 'score', 'rna_strand')
+CONTACTS_FILE_SUFFIXES = ('.tab', '.rc')
 BED_COLS = ('chr', 'start', 'end', 'name', 'score', 'strand')
 
 CHUNKSIZE = 10_000_000
@@ -40,16 +40,17 @@ def _contacts_to_bed(inp_file: Path, prep_file: Path) -> None:
 
 
 def _prepare_input(inp_file: Path, prep_file: Path) -> Optional[Path]:
-    if inp_file.suffix == '.bed':
+    suff = inp_file.suffix
+    if suff == '.bed':
         symlink(inp_file, prep_file)
-    elif inp_file.suffix == '.tab':
+    elif suff in CONTACTS_FILE_SUFFIXES:
         try:
             _contacts_to_bed(inp_file, prep_file)
         except Exception:  # actually ValueError, maybe smth else?
             logger.warning(f'{inp_file} is not a contacts table!')
             return None
     else:
-        logger.warning(f'Unknown file extension: {inp_file}')
+        logger.warning(f'Unknown file extension {suff} of {inp_file}')
         return None
     return prep_file
 
@@ -100,6 +101,7 @@ class DetectStrand(BaseModel):
     
     def __load_genes(self) -> Path:
         # fetch genes from annotation file
+        logger.log(VERBOSE, "Started processing gene annotation file.")
         file_ext = self.gene_annotation.suffix
         if file_ext == '.gtf':
             gene_annot = fetch_genes_from_gtf(self.gene_annotation, self.genes_list)
@@ -131,11 +133,11 @@ class DetectStrand(BaseModel):
                 prep_file = (self._work_pth / filename).with_suffix('.bed')
                 prep_file = _prepare_input(inp_file, prep_file)
                 if not prep_file:
-                    logger.warning(f'Could not read {prep_file}, skipping..')
+                    logger.warning(f'Could not read {inp_file}, skipping..')
                     continue
                 self._files_map[(group, file_id)] = prep_file
         if not self._files_map:
-            exit_with_error('Could not find any if the listed files in input directory!')
+            exit_with_error('Could not find any of the listed files in input directory!')
         logger.info(f'{len(self._files_map)} files found in input directory')
 
     def _get_coverage(self, key: Tuple[str, str]) -> int:
