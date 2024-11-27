@@ -145,7 +145,7 @@ class DetectStrand(BaseModel):
         name = input_bed.stem
         res_same = self._work_pth / f'{name}_same.bed'
         res_anti = self._work_pth / f'{name}_anti.bed'
-        # run coverage both ror same and anti strand
+        # run coverage both for same and anti strand
         cmd_1 = (
             f'bedtools coverage -a {self._bed_annot} -b {input_bed} '
             f'-s -counts > {res_same}'
@@ -209,7 +209,7 @@ class DetectStrand(BaseModel):
                                                     axis=1)
         self._result['anti'] = self._raw_result.apply(lambda row: row.apply(anti_wins).sum(),
                                                     axis=1)
-        
+        print(self._result)
         mask = (self._result['same'] - self._result['anti'])/(self._result['same'] + self._result['anti'])
         self._result['strand'] = 'UNKNOWN'
         self._result.loc[mask > 0.75, 'strand'] = 'SAME'
