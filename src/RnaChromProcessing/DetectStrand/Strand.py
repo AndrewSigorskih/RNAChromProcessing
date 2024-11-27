@@ -172,9 +172,9 @@ class DetectStrand(BaseModel):
             logger.log(VERBOSE, f'Gene {gene_name}: {same_val} reads on same strand, {anti_val} on antisence.')
             self._raw_result.at[key, gene_name] = (same_val, anti_val)
         # rm tmp files
-        input_bed.unlink()
-        res_same.unlink()
-        res_anti.unlink()
+        # input_bed.unlink()
+        # res_same.unlink()
+        # res_anti.unlink()
         return 0
 
     def calculate(self):
@@ -209,7 +209,7 @@ class DetectStrand(BaseModel):
                                                     axis=1)
         self._result['anti'] = self._raw_result.apply(lambda row: row.apply(anti_wins).sum(),
                                                     axis=1)
-        print(self._result)
+        print(self._raw_result)
         mask = (self._result['same'] - self._result['anti'])/(self._result['same'] + self._result['anti'])
         self._result['strand'] = 'UNKNOWN'
         self._result.loc[mask > 0.75, 'strand'] = 'SAME'
@@ -229,3 +229,4 @@ class DetectStrand(BaseModel):
         rna_strand_boxplot(self._raw_result, len(self._gene_names),
                            self.output_dir, self.prefix, self.plots_format)
         logger.info('Done.')
+        aboba = input("Press enter to finish")
