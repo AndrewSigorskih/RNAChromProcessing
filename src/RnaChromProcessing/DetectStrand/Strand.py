@@ -1,7 +1,6 @@
 import concurrent.futures
 import logging
-import re
-from os import chdir, listdir, symlink
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Dict, List, Literal, Optional, Tuple
@@ -10,28 +9,22 @@ import pandas as pd
 from pydantic import BaseModel, PositiveInt, field_validator
 
 from ..utils import (
-    check_file_exists, exit_with_error, find_in_list, run_command
+    exit_with_error, find_in_list, run_command
 )
+from ..utils.parsing import fetch_genes_from_bedrc, fetch_genes_from_gtf
 from ..utils.run_utils import VERBOSE
 from ..plots import rna_strand_barplot, rna_strand_boxplot, set_style_white
 
-CONTACTS_COLS = ('rna_chr', 'rna_bgn', 'rna_end', 'rna_strand')
-CONTACTS_BED_COLS = ('rna_chr', 'rna_bgn', 'rna_end', 'name', 'score', 'rna_strand')
+CONTACTS_COLS = ('rna_chr', 'rna_start', 'rna_end', 'rna_strand')
+CONTACTS_BED_COLS = ('rna_chr', 'rna_start', 'rna_end', 'name', 'score', 'rna_strand')
+CONTACTS_FILE_SUFFIXES = ('.tab', '.rc')
 BED_COLS = ('chr', 'start', 'end', 'name', 'score', 'strand')
-GTF_COLS = ('chr', 'type', 'start', 'end', 'strand', 'attrs')
 
 CHUNKSIZE = 10_000_000
-GENE_ID_PAT = re.compile(r'(?<=gene_id \")[^\"]+(?=\";)')
-GENE_NAME_PAT = re.compile(r'(?<=gene_name \")[^\"]+(?=\";)')
 
-logger = logging.getLogger('strand')
+
+logger = logging.getLogger()
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
-
-
-def _read_name_or_id(s: str) -> str:
-    # will throw exception if both attrs ase absent (invalid annotation)
-    capture = re.search(GENE_NAME_PAT, s) or re.search(GENE_ID_PAT, s)
-    return capture.group(0)
 
 
 def _contacts_to_bed(inp_file: Path, prep_file: Path) -> None:
@@ -47,16 +40,17 @@ def _contacts_to_bed(inp_file: Path, prep_file: Path) -> None:
 
 
 def _prepare_input(inp_file: Path, prep_file: Path) -> Optional[Path]:
-    if inp_file.suffix == '.bed':
-        symlink(inp_file, prep_file)
-    elif inp_file.suffix == '.tab':
+    suff = inp_file.suffix
+    if suff == '.bed':
+        os.symlink(inp_file, prep_file)
+    elif suff in CONTACTS_FILE_SUFFIXES:
         try:
             _contacts_to_bed(inp_file, prep_file)
         except Exception:  # actually ValueError, maybe smth else?
             logger.warning(f'{inp_file} is not a contacts table!')
             return None
     else:
-        logger.warning(f'Unknown file extension: {inp_file}')
+        logger.warning(f'Unknown file extension {suff} of {inp_file}')
         return None
     return prep_file
 
@@ -69,7 +63,7 @@ class DetectStrand(BaseModel):
     cpus: PositiveInt = 1
     plots_format: Literal['png', 'svg'] = 'png'
 
-    gtf_annotation: Path
+    gene_annotation: Path
     genes_list: Path
 
     def __init__(self,
@@ -78,7 +72,7 @@ class DetectStrand(BaseModel):
         super().__init__(**kwargs)
         # directories
         self.__setup_dirs()
-        chdir(self.base_dir)
+        os.chdir(self.base_dir)
         # tmp directory
         self._work_dir = TemporaryDirectory(dir=self.base_dir)
         self._work_pth = Path(self._work_dir.name)
@@ -92,10 +86,12 @@ class DetectStrand(BaseModel):
     def resolve_path(cls, pth: str) -> Path:
         return Path(pth).resolve()
     
-    @field_validator('gtf_annotation', 'genes_list')
+    @field_validator('gene_annotation', 'genes_list')
     @classmethod
     def check_files(cls, pth: str) -> Path:
-        check_file_exists(pth)
+        assert \
+            (os.path.exists(pth) and (os.path.getsize(pth) > 0)),\
+            f'File {pth} does not exist or is empty!'
         return Path(pth).resolve()
 
     def __setup_dirs(self) -> None:
@@ -106,29 +102,21 @@ class DetectStrand(BaseModel):
         self.output_dir.mkdir(parents=True, exist_ok=True)
     
     def __load_genes(self) -> Path:
-        # load lene names
-        with open(self.genes_list, 'r') as f:
-            # will search for gene_name "DDX11L2"; OR gene_id "ENSG00000290825.1"; for all listed genes
-            genes_list: str = '|'.join([f'"{line.strip()}";' for line in f])
-        # load annotation and extract selected genes
-        gene_annot = pd.read_csv(
-            self.gtf_annotation, sep='\t', header=None, skiprows=5,
-            usecols=[0,2,3,4,6,8], names=GTF_COLS
-        )
-        gene_annot = gene_annot[gene_annot['type'] == 'gene']
-        gene_annot = gene_annot[gene_annot['attrs'].str.contains(genes_list)]
-        if not (shape := gene_annot.shape[0]):
-            exit_with_error('Could not find any of the listed genes in annotation file!')
+        # fetch genes from annotation file
+        logger.log(VERBOSE, "Started processing gene annotation file.")
+        file_ext = self.gene_annotation.suffix
+        if file_ext == '.gtf':
+            gene_annot = fetch_genes_from_gtf(self.gene_annotation, self.genes_list)
+        elif file_ext == '.bedrc':
+            gene_annot = fetch_genes_from_bedrc(self.gene_annotation, self.genes_list)
         else:
-            logger.info(f'{shape} genes selected from annotation file.')
-        # save annotation as tmp bed file
-        try:
-            gene_annot['name'] = gene_annot['attrs'].apply(_read_name_or_id)
-        except AttributeError:
             exit_with_error(
-                'GTF annotation should have "gene_name" or "gene_id" attribute '
-                ' for "gene" type records!'
+                f"Unknown gene annotation format: {file_ext}! "
+                "Supported formats: gtf, bedrc."
             )
+        logger.info(f'{gene_annot.shape[0]} genes selected from annotation file.')
+
+        # save annotation as tmp bed file
         gene_annot['score'] = 100
         self._gene_names = gene_annot['name'].values
         self._bed_annot = self._work_pth / 'annotation.bed'
@@ -136,7 +124,7 @@ class DetectStrand(BaseModel):
 
     def __read_inputs(self, exp_groups: Dict[str, List[str]]) -> None:
         self._files_map: Dict[Tuple[str, str], Path] = {}
-        files_list = listdir(self.input_dir)
+        files_list = os.listdir(self.input_dir)
         for group, id_list in exp_groups.items():
             for file_id in id_list:
                 filename = find_in_list(file_id, files_list)
@@ -147,11 +135,11 @@ class DetectStrand(BaseModel):
                 prep_file = (self._work_pth / filename).with_suffix('.bed')
                 prep_file = _prepare_input(inp_file, prep_file)
                 if not prep_file:
-                    logger.warning(f'Could not read {prep_file}, skipping..')
+                    logger.warning(f'Could not read {inp_file}, skipping..')
                     continue
                 self._files_map[(group, file_id)] = prep_file
         if not self._files_map:
-            exit_with_error('Could not find any if the listed files in input directory!')
+            exit_with_error('Could not find any of the listed files in input directory!')
         logger.info(f'{len(self._files_map)} files found in input directory')
 
     def _get_coverage(self, key: Tuple[str, str]) -> int:
@@ -159,7 +147,7 @@ class DetectStrand(BaseModel):
         name = input_bed.stem
         res_same = self._work_pth / f'{name}_same.bed'
         res_anti = self._work_pth / f'{name}_anti.bed'
-        # run coverage both ror same and anti strand
+        # run coverage both for same and anti strand
         cmd_1 = (
             f'bedtools coverage -a {self._bed_annot} -b {input_bed} '
             f'-s -counts > {res_same}'
@@ -219,12 +207,15 @@ class DetectStrand(BaseModel):
         same_wins = lambda x: x[0] > x[1]
         anti_wins = lambda x: x[1] > x[0]
         self._result = pd.DataFrame(data=None, index=self._raw_result.index)
-        self._result['same'] = self._raw_result.apply(lambda row: row.apply(same_wins).sum(),
-                                                    axis=1)
-        self._result['anti'] = self._raw_result.apply(lambda row: row.apply(anti_wins).sum(),
-                                                    axis=1)
-        
-        mask = (self._result['same'] - self._result['anti'])/(self._result['same'] + self._result['anti'])
+        self._result['same'] = self._raw_result.apply(
+            lambda row: row.apply(same_wins).sum(),
+            axis=1
+        )
+        self._result['anti'] = self._raw_result.apply(
+            lambda row: row.apply(anti_wins).sum(),
+            axis=1
+        )
+        mask = (self._result['same'] - self._result['anti']) / (self._result['same'] + self._result['anti'])
         self._result['strand'] = 'UNKNOWN'
         self._result.loc[mask > 0.75, 'strand'] = 'SAME'
         self._result.loc[mask < -0.75, 'strand'] = 'ANTI'

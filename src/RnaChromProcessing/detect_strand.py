@@ -1,10 +1,15 @@
 import argparse
 import logging
+from pathlib import Path
 
-from .DetectStrand import DetectStrand
-from .utils import configure_logger, load_config
+from pydantic import ValidationError
 
-logger = logging.getLogger('strand')
+from .DetectStrand import DetectStrand, merge_tables
+from .utils import (
+    configure_logger, exit_with_validation_error, load_config
+)
+
+logger = logging.getLogger()
 
 
 def parse_args() -> argparse.Namespace:
@@ -26,7 +31,28 @@ def main() -> None:
     logger.debug(f'Started with arguments: {vars(args)}')
 
     config = load_config(args.config)
-    DetectStrand(**config).run()
+    try:
+        strand_detector = DetectStrand(**config)
+    except ValidationError as error:
+        exit_with_validation_error(error)
+    strand_detector.run()
+
+
+def merge() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--inputs', required=True,
+                        nargs='+', type=Path, help='''Input file(s).''')
+    parser.add_argument('-o', '--output', required=True,
+                        type=Path, help='''Output file.''')
+    parser.add_argument('-v', '--verbose', action='count', default=0,
+                        help='''Verbosity level. By default little to none information is printed.
+Use -v to increase information logs about each step.''')
+    
+    args = parser.parse_args()
+    configure_logger(logger, args.verbose)
+    logger.debug(f'Started with arguments: {vars(args)}')
+
+    merge_tables(args.inputs, args.output)
 
 
 if __name__ == '__main__':

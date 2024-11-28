@@ -1,4 +1,4 @@
-name: rnachrom-test
+name: rnachrom
 channels:
   - conda-forge
   - bioconda
