@@ -1,6 +1,6 @@
 import concurrent.futures
 import logging
-from os import chdir, listdir, symlink
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Dict, List, Literal, Optional, Tuple
@@ -42,7 +42,7 @@ def _contacts_to_bed(inp_file: Path, prep_file: Path) -> None:
 def _prepare_input(inp_file: Path, prep_file: Path) -> Optional[Path]:
     suff = inp_file.suffix
     if suff == '.bed':
-        symlink(inp_file, prep_file)
+        os.symlink(inp_file, prep_file)
     elif suff in CONTACTS_FILE_SUFFIXES:
         try:
             _contacts_to_bed(inp_file, prep_file)
@@ -72,7 +72,7 @@ class DetectStrand(BaseModel):
         super().__init__(**kwargs)
         # directories
         self.__setup_dirs()
-        chdir(self.base_dir)
+        os.chdir(self.base_dir)
         # tmp directory
         self._work_dir = TemporaryDirectory(dir=self.base_dir)
         self._work_pth = Path(self._work_dir.name)
@@ -89,7 +89,9 @@ class DetectStrand(BaseModel):
     @field_validator('gene_annotation', 'genes_list')
     @classmethod
     def check_files(cls, pth: str) -> Path:
-        check_file_exists(pth)
+        assert \
+            (os.path.exists(pth) and (os.path.getsize(pth) > 0)),\
+            f'File {pth} does not exist or is empty!'
         return Path(pth).resolve()
 
     def __setup_dirs(self) -> None:
@@ -122,7 +124,7 @@ class DetectStrand(BaseModel):
 
     def __read_inputs(self, exp_groups: Dict[str, List[str]]) -> None:
         self._files_map: Dict[Tuple[str, str], Path] = {}
-        files_list = listdir(self.input_dir)
+        files_list = os.listdir(self.input_dir)
         for group, id_list in exp_groups.items():
             for file_id in id_list:
                 filename = find_in_list(file_id, files_list)
@@ -172,9 +174,9 @@ class DetectStrand(BaseModel):
             logger.log(VERBOSE, f'Gene {gene_name}: {same_val} reads on same strand, {anti_val} on antisence.')
             self._raw_result.at[key, gene_name] = (same_val, anti_val)
         # rm tmp files
-        # input_bed.unlink()
-        # res_same.unlink()
-        # res_anti.unlink()
+        input_bed.unlink()
+        res_same.unlink()
+        res_anti.unlink()
         return 0
 
     def calculate(self):
@@ -205,12 +207,15 @@ class DetectStrand(BaseModel):
         same_wins = lambda x: x[0] > x[1]
         anti_wins = lambda x: x[1] > x[0]
         self._result = pd.DataFrame(data=None, index=self._raw_result.index)
-        self._result['same'] = self._raw_result.apply(lambda row: row.apply(same_wins).sum(),
-                                                    axis=1)
-        self._result['anti'] = self._raw_result.apply(lambda row: row.apply(anti_wins).sum(),
-                                                    axis=1)
-        print(self._raw_result)
-        mask = (self._result['same'] - self._result['anti'])/(self._result['same'] + self._result['anti'])
+        self._result['same'] = self._raw_result.apply(
+            lambda row: row.apply(same_wins).sum(),
+            axis=1
+        )
+        self._result['anti'] = self._raw_result.apply(
+            lambda row: row.apply(anti_wins).sum(),
+            axis=1
+        )
+        mask = (self._result['same'] - self._result['anti']) / (self._result['same'] + self._result['anti'])
         self._result['strand'] = 'UNKNOWN'
         self._result.loc[mask > 0.75, 'strand'] = 'SAME'
         self._result.loc[mask < -0.75, 'strand'] = 'ANTI'
@@ -229,4 +234,3 @@ class DetectStrand(BaseModel):
         rna_strand_boxplot(self._raw_result, len(self._gene_names),
                            self.output_dir, self.prefix, self.plots_format)
         logger.info('Done.')
-        aboba = input("Press enter to finish")

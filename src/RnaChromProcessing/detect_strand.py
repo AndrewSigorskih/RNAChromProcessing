@@ -2,8 +2,12 @@ import argparse
 import logging
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from .DetectStrand import DetectStrand, merge_tables
-from .utils import configure_logger, load_config
+from .utils import (
+    configure_logger, exit_with_validation_error, load_config
+)
 
 logger = logging.getLogger('strand')
 
@@ -27,7 +31,11 @@ def main() -> None:
     logger.debug(f'Started with arguments: {vars(args)}')
 
     config = load_config(args.config)
-    DetectStrand(**config).run()
+    try:
+        strand_detector = DetectStrand(**config)
+    except ValidationError as error:
+        exit_with_validation_error(error)
+    strand_detector.run()
 
 
 def merge() -> None:

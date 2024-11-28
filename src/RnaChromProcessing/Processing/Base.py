@@ -36,7 +36,7 @@ class BaseProcessor(BaseModel):
     def __del__(self):
         rmtree(self._work_pth)
 
-    def __validate_inputs(self):
+    def __validate_inputs(self):  # TODO probably rewrite validations in a more pydantic-ish way
         self.input_dir = self.input_dir.resolve()
         self.output_dir = self.output_dir.resolve()
         if not self.input_dir.exists():

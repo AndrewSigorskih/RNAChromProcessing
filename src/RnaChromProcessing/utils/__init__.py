@@ -1,4 +1,4 @@
-from .errors import exit_with_error
+from .errors import exit_with_error, exit_with_validation_error
 from .file_utils import (
     check_file_exists, gzip_file, make_directory, move_exist_ok,
     remove_suffixes, validate_tool_path
