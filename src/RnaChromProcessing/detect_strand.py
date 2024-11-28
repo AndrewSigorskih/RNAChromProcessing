@@ -9,7 +9,7 @@ from .utils import (
     configure_logger, exit_with_validation_error, load_config
 )
 
-logger = logging.getLogger('strand')
+logger = logging.getLogger()
 
 
 def parse_args() -> argparse.Namespace:

@@ -9,7 +9,7 @@ import pandas as pd
 from pydantic import BaseModel, PositiveInt, field_validator
 
 from ..utils import (
-    check_file_exists, exit_with_error, find_in_list, run_command
+    exit_with_error, find_in_list, run_command
 )
 from ..utils.parsing import fetch_genes_from_bedrc, fetch_genes_from_gtf
 from ..utils.run_utils import VERBOSE
@@ -23,7 +23,7 @@ BED_COLS = ('chr', 'start', 'end', 'name', 'score', 'strand')
 CHUNKSIZE = 10_000_000
 
 
-logger = logging.getLogger('strand')
+logger = logging.getLogger()
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
 
 
