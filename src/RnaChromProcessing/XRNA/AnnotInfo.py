@@ -1,12 +1,14 @@
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
 import pandas as pd
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
-from ..utils import check_file_exists, exit_with_error, run_command
+from ..utils import exit_with_error, run_command
+from ..utils.parsing import read_bedrc, read_gtf, write_bed
 
 logger = logging.getLogger()
 
@@ -31,20 +33,24 @@ class SampleInfo:
 
 
 class AnnotInfo(BaseModel):
-    gtf_annotation: Path
+    gene_annotation: Path
     strand_info: Path
     samples: List[SampleInfo] = []
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        check_file_exists(self.gtf_annotation)
-        check_file_exists(self.strand_info)
         self._read_strand_info()
 
+    @field_validator('gene_annotation', 'strand_info')
+    @classmethod
+    def check_file(cls, pth: str) -> Path:
+        assert \
+            (os.path.exists(pth) and (os.path.getsize(pth) > 0)),\
+            f'File {pth} does not exist or is empty!'
+        return Path(pth).resolve()
 
     def _read_strand_info(self) -> None:
-        strand_info = pd.read_table(self.strand_info, sep='\t',
-                                    index_col=[0,1])
+        strand_info = pd.read_table(self.strand_info, sep='\t', index_col=[0,1])
         unk_strand = strand_info[strand_info.strand == 'UNKNOWN'].index.get_level_values(1)
         if (unk_num := len(unk_strand)) > 0:
             logger.debug(f'Will ignore {unk_num} files that failed strand detection:')
@@ -67,14 +73,22 @@ class AnnotInfo(BaseModel):
                            work_pth: Path) -> None:
         self._annot_bed: Path = work_pth / 'gene_annotation.bed'
         tmp_bed: Path = work_pth / 'tmp_annotation.bed'
-        # gtf to bed conversion
-        genes = pd.read_csv(self.gtf_annotation, skiprows=5, sep='\t', 
-                            header=None, usecols=[0,2,3,4,6,8])
-        genes = genes[genes[2] == 'gene']
-        genes[8] = genes[8].apply(lambda x: x.split(";")[0].split(" ")[-1].strip('""'))
-        genes[5] = 1
-        genes[[0, 3, 4, 8, 5, 6]].to_csv(tmp_bed, sep='\t', index=False, header=False)
+        
+        # convert annotation to bed
+        file_ext = self.gene_annotation.suffix
+        if file_ext == '.gtf':
+            genes = read_gtf(self.gene_annotation)
+        elif file_ext == '.bedrc':
+            genes = read_bedrc(self.gene_annotation)
+        else:
+            exit_with_error(
+                f"Unknown gene annotation format: {file_ext}! "
+                "Supported formats: gtf, bedrc."
+            )
+        genes['score'] = 1
+        write_bed(genes, tmp_bed)
 
+        # sort annot bed file
         cmd = f'bedtools sort -i {tmp_bed} > {self._annot_bed}'
         return_code = run_command(cmd, shell=True)
         if return_code:

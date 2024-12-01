@@ -7,6 +7,7 @@ from .errors import exit_with_error
 from .file_utils import check_file_exists
 
 
+BED_COLS = ('chr', 'start', 'end', 'name', 'score', 'strand')
 BEDRC_COLS = ('chr', 'start', 'end', 'name', 'strand', 'biotype', 'source')
 GTF_COLS = ('chr', 'type', 'start', 'end', 'strand', 'attrs')
 
@@ -41,7 +42,8 @@ def read_bedrc(filepath: Path) -> pd.DataFrame:
 
 
 def read_gtf(filepath: Path) -> pd.DataFrame:
-    """Load gene annotation in gtf format"""
+    """Load gene annotation in gtf format.
+    Adds a 'name' column for utility purposes."""
     skip = 0
     with open(filepath, 'r') as f:
         while next(f).startswith('#'):
@@ -51,6 +53,14 @@ def read_gtf(filepath: Path) -> pd.DataFrame:
         usecols=[0,2,3,4,6,8], names=GTF_COLS
     )
     data = data[data['type'] == 'gene']
+    # create a column containing gene name/id
+    try:
+        data['name'] = data['attrs'].apply(_read_name_or_id)
+    except AttributeError:
+        exit_with_error(
+            'GTF annotation should have "gene_name" or "gene_id" attribute '
+            'for "gene" type records!'
+        )
     return data
 
 
@@ -75,15 +85,6 @@ def fetch_genes_from_gtf(annotation: Path, genes_file: Path) -> pd.DataFrame:
     data = data[data['attrs'].str.contains(genes_list)]
     if not data.shape[0]:
         exit_with_error('Could not find any of the listed genes in provided annotation file!')
-
-    # create a column containing gene name/id
-    try:
-        data['name'] = data['attrs'].apply(_read_name_or_id)
-    except AttributeError:
-        exit_with_error(
-            'GTF annotation should have "gene_name" or "gene_id" attribute '
-            'for "gene" type records!'
-        )
     return data
 
 
@@ -100,3 +101,15 @@ def fetch_genes_from_bedrc(annotation: Path, genes_file: Path) -> pd.DataFrame:
     if not data.shape[0]:
         exit_with_error('Could not find any of the listed genes in provided annotation file!')
     return data
+
+
+# conversion
+
+def write_bed(data: pd.DataFrame, path: Path) -> None:
+    """Write provided pd data frame as bed file.
+    Requires all needed bed columns to be already present (but ignores any extra columns).
+    Throws AttributeError if sufficient columns are not found."""
+    for item in BED_COLS:
+        if item not in data.columns:
+            raise AttributeError(f"DataFrame to bed conversion failed: column {item} not found!")
+    data.loc[:, BED_COLS].to_csv(path, sep='\t', index=False, header=False)

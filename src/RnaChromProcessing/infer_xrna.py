@@ -1,8 +1,12 @@
 import argparse
 import logging
 
+from pydantic import ValidationError
+
 from .XRNA import XRNAProcessor
-from .utils import configure_logger, load_config
+from .utils import (
+    configure_logger, exit_with_validation_error, load_config
+)
 
 logger = logging.getLogger()
 
@@ -26,7 +30,11 @@ def main() -> None:
     logger.debug(f'Started with arguments: {vars(args)}')
     
     config = load_config(args.config)
-    XRNAProcessor(**config).run()
+    try:
+        processor = XRNAProcessor(**config)
+    except ValidationError as error:
+        exit_with_validation_error(error)
+    processor.run()
     
 
 if __name__ == '__main__':

@@ -11,14 +11,14 @@ from pydantic import BaseModel, PositiveInt, field_validator
 from ..utils import (
     exit_with_error, find_in_list, run_command
 )
-from ..utils.parsing import fetch_genes_from_bedrc, fetch_genes_from_gtf
+from ..utils.parsing import fetch_genes_from_bedrc, fetch_genes_from_gtf, write_bed
 from ..utils.run_utils import VERBOSE
 from ..plots import rna_strand_barplot, rna_strand_boxplot, set_style_white
 
 CONTACTS_COLS = ('rna_chr', 'rna_start', 'rna_end', 'rna_strand')
 CONTACTS_BED_COLS = ('rna_chr', 'rna_start', 'rna_end', 'name', 'score', 'rna_strand')
 CONTACTS_FILE_SUFFIXES = ('.tab', '.rc')
-BED_COLS = ('chr', 'start', 'end', 'name', 'score', 'strand')
+#BED_COLS = ('chr', 'start', 'end', 'name', 'score', 'strand')
 
 CHUNKSIZE = 10_000_000
 
@@ -117,10 +117,11 @@ class DetectStrand(BaseModel):
         logger.info(f'{gene_annot.shape[0]} genes selected from annotation file.')
 
         # save annotation as tmp bed file
-        gene_annot['score'] = 100
+        gene_annot['score'] = 1
         self._gene_names = gene_annot['name'].values
         self._bed_annot = self._work_pth / 'annotation.bed'
-        gene_annot.loc[:,BED_COLS].to_csv(self._bed_annot, sep='\t', index=False, header=False)
+        #gene_annot.loc[:,BED_COLS].to_csv(self._bed_annot, sep='\t', index=False, header=False)
+        write_bed(gene_annot, self._bed_annot)
 
     def __read_inputs(self, exp_groups: Dict[str, List[str]]) -> None:
         self._files_map: Dict[Tuple[str, str], Path] = {}
