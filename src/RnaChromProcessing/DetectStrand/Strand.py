@@ -124,6 +124,7 @@ class DetectStrand(BaseModel):
         write_bed(gene_annot, self._bed_annot)
 
     def __read_inputs(self, exp_groups: Dict[str, List[str]]) -> None:
+        logger.log(VERBOSE, "Started processing input file(s).")
         self._files_map: Dict[Tuple[str, str], Path] = {}
         files_list = os.listdir(self.input_dir)
         for group, id_list in exp_groups.items():
@@ -141,7 +142,7 @@ class DetectStrand(BaseModel):
                 self._files_map[(group, file_id)] = prep_file
         if not self._files_map:
             exit_with_error('Could not find any of the listed files in input directory!')
-        logger.info(f'{len(self._files_map)} files found in input directory')
+        logger.info(f'{len(self._files_map)} files found and processed.')
 
     def _get_coverage(self, key: Tuple[str, str]) -> int:
         input_bed = self._files_map[key]
