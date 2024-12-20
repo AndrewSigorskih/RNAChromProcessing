@@ -7,8 +7,9 @@ from typing import Optional, Set
 from pydantic import BaseModel, PositiveInt, field_validator
 
 from .AnnotInfo import AnnotInfo
-from .DataPreprocessing import HisatTool, PreprocessingPipeline
+from .DataPreprocessing import HisatTool, PreprocessingPipeline # TODO remove
 from .StringtiePipeline import StringtieTool, StringtiePipeline
+from .XBamFilter import XBamFilter
 from ..utils.PoolExecutor import PoolExecutor
 
 logger = logging.getLogger()
@@ -45,12 +46,8 @@ class XRNAProcessor(BaseModel):
         work_pth = Path(self._work_dir.name)
         executor = PoolExecutor(self.cpus)
         self.annotation.prepare_annotation(work_pth)
-        self._preprocessing = PreprocessingPipeline(
-            work_pth, executor, self.hisat
-        )
-        self._pipeline = StringtiePipeline(
-            work_pth, executor, self.stringtie
-        )
+        self._preprocessing = XBamFilter(work_pth, executor)
+        self._pipeline = StringtiePipeline(work_pth, executor, self.stringtie)
 
     @field_validator('file_ids', mode='after')
     @classmethod
@@ -68,10 +65,15 @@ class XRNAProcessor(BaseModel):
     def run(self):
         # run pipeline
         prepared_bams = self._preprocessing.run(
-            self.rna_ids, self.bed_input_dir, self.fq_input_dir, self.annotation
+            self.rna_ids,
+            self.annotation,
+            self.bam_input_dir, 
+            self.filter_ids_input_dir
         )
         self._pipeline.run(
-            prepared_bams, self.annotation, self.ouputs_prefix
+            prepared_bams,
+            self.annotation,
+            self.ouputs_prefix
         )
         # save outputs
         self._preprocessing.save_outputs(self.output_dir, self.keep_extras)

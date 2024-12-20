@@ -1,8 +1,8 @@
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, Field
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import pandas as pd
 from pydantic import BaseModel, field_validator
@@ -18,6 +18,9 @@ class SampleInfo:
     sample_id: str
     sample_group: str
     true_strand: bool
+    files_map: Dict[str, Path] = Field(default_factory=dict)
+
+    # TODO remove it ALL
     fq_file: Optional[Path] = None
     bed_file: Optional[Path] = None
     lst_file: Optional[Path] = None
@@ -50,11 +53,32 @@ class AnnotInfo(BaseModel):
         return Path(pth).resolve()
 
     def _read_strand_info(self) -> None:
-        strand_info = pd.read_table(self.strand_info, sep='\t', index_col=[0,1])
-        unk_strand = strand_info[strand_info.strand == 'UNKNOWN'].index.get_level_values(1)
+        logger.debug("Started processing strand information file.")
+        strand_info = pd.read_table(self.strand_info, sep='\t', index_col=[0,1]).sort_index()
+
+        # identify and drop any ids for which strand is unknown
+        unk_strand = strand_info[strand_info.strand == 'UNKNOWN'].index
         if (unk_num := len(unk_strand)) > 0:
-            logger.debug(f'Will ignore {unk_num} files that failed strand detection:')
-            logger.debug(f'{", ".join(x for x in unk_strand)}')
+            logger.warning(
+                f'Will ignore {unk_num} files that failed strand detection: '
+                f'{", ".join(x for x in unk_strand.get_level_values(1))}'
+            )
+            strand_info = strand_info.drop(index=unk_strand)
+
+        # identify and drop any group with inconsistent strand status
+        to_drop = []
+        for group in strand_info.index.unique(level=0):
+            if strand_info.loc[group,].strand.nunique() > 1:
+                to_drop.append(group)
+        if to_drop:
+            logger.warning(
+                "These groups have inconsistent strand status and will be ignored: "
+                f"{', '.join(to_drop)}"
+            )
+            strand_info = strand_info.drop(index=to_drop)
+
+        if not strand_info.shape[0]:
+            exit_with_error("No suitable entries to process!")
 
         self.samples = [
             *(
