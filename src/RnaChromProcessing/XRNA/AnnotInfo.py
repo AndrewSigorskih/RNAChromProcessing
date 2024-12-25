@@ -33,6 +33,13 @@ class SampleInfo:
     
     def inputs_ok(self) -> bool:
         return (self.bed_file is not None) and (self.fq_file is not None)
+    
+
+class GroupInfo:
+    group_id: str
+    samples: List[SampleInfo]
+    true_strand: bool
+    files_map: Dict[str, Path] = Field(default_factory=dict)
 
 
 class AnnotInfo(BaseModel):

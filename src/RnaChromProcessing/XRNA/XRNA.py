@@ -7,7 +7,6 @@ from typing import Optional, Set
 from pydantic import BaseModel, PositiveInt, field_validator
 
 from .AnnotInfo import AnnotInfo
-from .DataPreprocessing import HisatTool, PreprocessingPipeline # TODO remove
 from .StringtiePipeline import StringtieTool, StringtiePipeline
 from .XBamFilter import XBamFilter
 from ..utils.PoolExecutor import PoolExecutor
@@ -29,7 +28,6 @@ class XRNAProcessor(BaseModel):
     ouputs_prefix: str = 'xrna'
     keep_extras: Set[str] = set() # TODO maybe remove
 
-    hisat: HisatTool # TODO remove
     stringtie: StringtieTool
 
     def __init__(self, **kwargs):
@@ -64,14 +62,14 @@ class XRNAProcessor(BaseModel):
 
     def run(self):
         # run pipeline
-        prepared_bams = self._preprocessing.run(
+        groups = self._preprocessing.run(
             self.rna_ids,
             self.annotation,
             self.bam_input_dir, 
             self.filter_ids_input_dir
         )
         self._pipeline.run(
-            prepared_bams,
+            groups,
             self.annotation,
             self.ouputs_prefix
         )
