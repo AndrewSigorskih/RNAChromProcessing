@@ -198,7 +198,7 @@ class XBamFilter:
         # Create outputs to move further
         groups = []
         for group_id, samples in replics_dct.items():
-            group = GroupInfo(group_id, samples, samples[0].true_strand)
+            group = GroupInfo(group_id, samples)
             group.files_map['bam'] = self.sort_bam / f'{group_id}.bam'
             groups.append(group)
 

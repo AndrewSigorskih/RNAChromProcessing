@@ -38,8 +38,11 @@ class SampleInfo:
 class GroupInfo:
     group_id: str
     samples: List[SampleInfo]
-    true_strand: bool
     files_map: Dict[str, Path] = Field(default_factory=dict)
+
+    @property
+    def true_strand(self) -> bool:
+        return self.samples[0].true_strand
 
 
 class AnnotInfo(BaseModel):
