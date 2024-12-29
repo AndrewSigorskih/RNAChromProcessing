@@ -8,7 +8,7 @@ import pandas as pd
 from pydantic import BaseModel, field_validator
 
 from ..utils import exit_with_error, run_command
-from ..utils.parsing import read_bedrc, read_gtf, write_bed
+from ..utils.parsing import read_gtf, write_bed
 
 logger = logging.getLogger()
 
@@ -112,12 +112,10 @@ class AnnotInfo(BaseModel):
         file_ext = self.gene_annotation.suffix
         if file_ext == '.gtf':
             genes = read_gtf(self.gene_annotation)
-        elif file_ext == '.bedrc':
-            genes = read_bedrc(self.gene_annotation)
         else:
             exit_with_error(
                 f"Unknown gene annotation format: {file_ext}! "
-                "Supported formats: gtf, bedrc."
+                "Only gtf format is supported by stringtie."
             )
         genes['score'] = 1
         write_bed(genes, tmp_bed)
