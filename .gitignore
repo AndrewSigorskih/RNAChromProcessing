@@ -1,5 +1,8 @@
 test.ipynb
 test.py
+tmp/
+
+venv/
 
 # Distribution / packaging
 *.egg-info/
