@@ -10,7 +10,7 @@ from typing_extensions import Annotated
 import pandas as pd
 from pydantic import BaseModel, Field, field_validator
 
-from .AnnotInfo import AnnotInfo
+from .AnnotInfo import AnnotInfo, GroupInfo
 from .Labeller import Labeller
 from ..utils.PoolExecutor import PoolExecutor
 from ..plots import (
@@ -30,6 +30,22 @@ TPM_PAT = re.compile(r'(?<=TPM \")([0-9]*[.])?[0-9]+(?=\";)')
 X_ID_PAT = re.compile(r'(?<=gene_id \")[0-9a-zA-Z_]+(?=\";)')
 
 
+
+def _convert_strand(in_gtf: Path, out_gtf: Path) -> None:
+    REVERSE = {
+        '+': '-',
+        '-': '+',
+        '.': '.'
+    }
+    with open(in_gtf, 'r') as in_f, open(out_gtf, 'w') as out_f:
+        for line in in_f:
+            if not line.startswith('#'):
+                fields = line.strip().split('\t')
+                fields[6] = REVERSE[fields[6]]
+                line = '\t'.join(fields) + '\n'
+            out_f.write(line)
+
+
 class StringtieTool(BaseModel):
     tool_path: Annotated[Optional[Path], Field(validate_default=True)] = None
     stringtie_threads: int = 1
@@ -41,23 +57,34 @@ class StringtieTool(BaseModel):
         val_fn = partial(validate_tool_path, tool_name='stringtie')
         return val_fn(val)
     
-
     def run_stringtie(self,
-                      inputs: Tuple[Path, Path],
-                      out_file: Path) -> int:
-        in_bam, gtf_annot = inputs
+                      group: GroupInfo,
+                      gtf_annot: Path) -> int:
+        in_bam = group.files_map['bam']
+        out_file = group.files_map['gtf']
+        raw_gtf = out_file.with_suffix('.tmp')        
         cmd = (
-            f'{self.tool_path} -o {out_file} -G {gtf_annot} '
+            f'{self.tool_path} -o {raw_gtf} -G {gtf_annot} '
             f'-p {self.stringtie_threads} {in_bam}'
         )
         return_code = run_command(cmd, shell=True)
-        return return_code
-
+        if return_code:
+            return return_code
+        # finally manage strandness HERE
+        try:
+            if group.true_strand:
+                shutil.copy(raw_gtf, out_file)
+            else:
+                _convert_strand(raw_gtf, out_file)
+        except Exception as _:
+            import traceback
+            logger.critical(traceback.format_exc())
+            return 1
+        return 0
 
     def run_stringtie_merge(self,
                             assembly_list: Path,
                             output_file: Path) -> int:
-        logger.debug('Started stringtie merge.')
         cmd = (
             f'{self.tool_path} --merge -p {self.stringtie_threads} '
             f'-o {output_file} {assembly_list}'
@@ -88,30 +115,27 @@ class StringtiePipeline:
             subdir = work_pth / subdir_name
             setattr(self, subdir_name, subdir)
             subdir.mkdir()
-    
+
     def run_stringtie(self,
-                      input_bams: List[Path],
-                      gtf_annot: Path) -> List[Path]:
-        inputs = list(
-            zip(
-                input_bams,
-                (gtf_annot for _ in range(len(input_bams)))
-            )
-        )
-        outputs = [
-            self.stringtie_raw / f'{file.stem}.gtf' for file in input_bams
-        ]
+                      input_groups: List[GroupInfo],
+                      gtf_annot: Path) -> None:
+        logger.debug('Started stringtie inference.')
+        gtf_inputs = [gtf_annot for _ in range(len(input_groups))]
+        for group in input_groups:
+            group.files_map['gtf'] = self.stringtie_raw / f'{group.files_map["bam"].stem}.gtf'
         self.executor.run_function(
             self.stringtie_tool.run_stringtie,
-            inputs, outputs, override_cpus=self.stringtie_tool.cpus
+            input_groups, gtf_inputs, override_cpus=self.stringtie_tool.cpus
         )
-        return outputs
-    
-    def run_stringtie_merge(self,
-                            raw_gtfs: List[Path]) -> None:
+
+    def run_stringtie_merge(self, input_groups: List[GroupInfo]) -> None:
+        logger.debug('Started stringtie merge.')
         assembly_lst: Path = self.stringtie_merge / 'assembly.lst'
         with open(assembly_lst, 'w') as f:
-            print(*raw_gtfs, sep='\n', file=f)
+            print(
+                *(group.files_map['gtf'] for group in input_groups),
+                sep='\n', file=f
+            )
         merged_file: Path = self.stringtie_merge / 'merged.gtf'
         self.stringtie_tool.run_stringtie_merge(assembly_lst, merged_file)
         assembly_lst.unlink()
@@ -166,7 +190,7 @@ class StringtiePipeline:
         for tmp_file in (raw_bed, nonoverlap_bed, counts_bed):
             tmp_file.unlink()
 
-    def assign_names(self) -> None:
+    def assign_names(self) -> None:  # TODO remake
         labeller = Labeller()
         xrnas: Path = self.xrna / 'xrna.bed'
         logger.debug('Started XRNA labelling.')
@@ -192,7 +216,8 @@ class StringtiePipeline:
             f'-b {bed_annot} > {closest_res}'
         )
         ret = run_command(cmd, shell=True)
-        if ret: exit_with_error('Running bedtools closest failed!')
+        if ret:
+            exit_with_error('Running bedtools closest failed!')
         # process results
         closest_res_header = [
             'chr', 'start', 'end', 'name', 'score', 'strand', 'closest_gene_chr',
@@ -208,92 +233,15 @@ class StringtiePipeline:
         # cleanup
         closest_res.unlink()
 
-    def run_stringtie_cov(self, input_bams: List[Path]) -> None:
-        xrnas_bed: Path = self.xrna / 'xrna.bed'
-        xrnas_gtf: Path = self.xrna / 'xrna.gtf'
-        xrnas_tab: Path = self.xrna / 'xrna.tab'
-        # create X-rna GTF file
-        tab = pd.read_csv(xrnas_bed, sep='\t', header=None,
-                          names=['chr', 'start', 'end', 'name', 'score', 'strand'])
-        tab['feature'] = 'transcript'
-        tab['frame'] = '.'
-        tab['attr'] = tab['name'].apply(
-            lambda x: f'gene_id "{x}"; transcript_id "{x}"'
-        )
-        gtf_header = ['chr', 'name', 'feature', 'start', 'end', 'score', 'strand', 'frame', 'attr']
-        tab = tab[gtf_header]
-        tab.to_csv(xrnas_gtf, sep='\t', index=False, header=False, quoting=QUOTE_NONE)
-        # run stringtie-cov
-        inputs = list(
-            zip(
-                input_bams,
-                (xrnas_gtf for _ in range(len(input_bams)))
-            )
-        )
-        outputs: List[Path] = [
-            self.stringtie_cov / f'{file.stem}.gtf' for file in input_bams
-        ]
-        self.executor.run_function(
-            self.stringtie_tool.run_stringtie_cov,
-            inputs, outputs, override_cpus=self.stringtie_tool.cpus
-        )
-        # add fields to xrna table
-        tab = pd.read_csv(xrnas_tab, sep='\t', index_col=0)
-        for output in outputs:
-            name = output.stem
-            cov_tbl = pd.read_csv(output, sep='\t', header=None,
-                                  skiprows=2, names=gtf_header)
-            cov_tbl = cov_tbl[cov_tbl['feature'] == 'transcript']
-            cov_tbl['TPM'] = cov_tbl['attr'].apply(
-                lambda x: re.search(TPM_PAT, x).group(0)
-            ).astype(float)
-            cov_tbl['X_id'] = cov_tbl['attr'].apply(
-                lambda x: re.search(X_ID_PAT, x).group(0)
-            )
-            cov_tbl = cov_tbl.set_index('X_id')
-            tab[f'{name}_TPM'] = cov_tbl['TPM']
-        tab.to_csv(xrnas_tab, sep='\t', index=True, header=True)
-
-    def make_plots(self, prefix: str) -> None:
-        xrnas_tab: Path = self.xrna / 'xrna.tab'
-        tab = pd.read_csv(xrnas_tab, sep='\t', index_col=0)
-        # plot data
-        set_style_white()
-        plot_length_distribution(tab, self.plots, prefix)
-        plot_distance_to_closest(tab, self.plots, prefix)
-        plot_tpm_expressions(tab, self.plots, prefix)
 
     def run(self,
-            input_bams: List[Path],
+            input_groups: List[GroupInfo],
             annot_info: AnnotInfo,
             prefix: str) -> None:
-        raw_gtfs = self.run_stringtie(input_bams, annot_info.gtf_annotation)
-        self.run_stringtie_merge(raw_gtfs)
+        self.run_stringtie(input_groups, annot_info.gene_annotation)
+        self.run_stringtie_merge(input_groups)
         self.handle_intervals(annot_info.annot_bed)
         self.assign_names()
         self.closest_gene(annot_info.annot_bed)
-        self.run_stringtie_cov(input_bams)
-        self.make_plots(prefix)
-
-    def save_outputs(self,
-                     prefix: str,
-                     output_dir: Path,
-                     keep_extras: Set[str]) -> None:
-        KEEP_FULL: Dict[str, Path]  = {
-            'stringtie_raw': self.stringtie_raw,
-            'stringtie_merge': self.stringtie_merge,
-            'stringtie_cov': self.stringtie_cov,
-            'plots': self.plots
-        }
-        keep_extras = keep_extras & set(KEEP_FULL)
-        keep_extras.add('plots') # save plots anyway
-        for name in keep_extras:
-            src = KEEP_FULL[name]
-            dst = output_dir / name
-            dst.mkdir(exist_ok=True)
-            move_exist_ok(src, dst)
-        main_outputs_ext = ('bed', 'tab')
-        for ext in main_outputs_ext:
-            src = self.xrna / f'xrna.{ext}'
-            dst = output_dir / f'{prefix}.{ext}'
-            shutil.move(src, dst)
+        # self.run_stringtie_cov(input_bams)
+        # self.make_plots(prefix)
