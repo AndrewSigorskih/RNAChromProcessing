@@ -1,6 +1,6 @@
 import logging
 import os
-from dataclasses import dataclass, Field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -18,7 +18,7 @@ class SampleInfo:
     sample_id: str
     sample_group: str
     true_strand: bool
-    files_map: Dict[str, Path] = Field(default_factory=dict)
+    files_map: Dict[str, Path] = field(default_factory=dict)
 
     # TODO remove it ALL
     fq_file: Optional[Path] = None
@@ -33,12 +33,13 @@ class SampleInfo:
     
     def inputs_ok(self) -> bool:
         return (self.bed_file is not None) and (self.fq_file is not None)
-    
 
+    
+@dataclass
 class GroupInfo:
     group_id: str
     samples: List[SampleInfo]
-    files_map: Dict[str, Path] = Field(default_factory=dict)
+    files_map: Dict[str, Path] = field(default_factory=dict)
 
     @property
     def true_strand(self) -> bool:

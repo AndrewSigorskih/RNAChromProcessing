@@ -1,11 +1,10 @@
-
 """
 Симуляция входных данных для модуля поиска новых хроматин-ассоциированных РНК.
  
 Выход (в --outdir, имена с --prefix):
-  {prefix}.known_genes.gtf     разметка "известных" генов (только записи gene) -> вход модуля
+  {prefix}.known_genes.gtf     разметка "известных" генов (gene + transcript + exon, одноэкзонные) -> вход модуля
   {prefix}.sampleNN.bam(.bai)  отсортированные и проиндексированные BAM с RNA-ридами -> вход модуля
-  {prefix}.samples.tsv         манифест: какая бамка в какой ориентации (sense / antisense)
+  {prefix}.samples.tsv         манифест: бамки и их ориентация (у всех одинаковая)
   {prefix}.unknown_genes.bed   BED6 с "неизвестными" генами -> только для проверки
   {prefix}.truth_counts.tsv    все гены + число ридов в каждой бамке -> для проверки
   {prefix}.genome.fa(.fai)     случайный референс (для IGV / samtools)
@@ -20,9 +19,11 @@
     (--readthrough-decay), обрезана на --readthrough-length.
   * Экспрессия: базовая логнормальная на ген + логнормальный шум на образец.
   * Синглтоны: равномерно по геному, случайный стренд.
-  * Риды single-end, без сплайсинга и мисматчей; флаг стренда = стренд РНК
-    (для "antisense"-бамок, т.е. протоколов, читающих реверс-комплемент, — инвертирован).
-  * XS:A — стренд для StringTie (см. --xs-mode).
+  * Риды single-end, без сплайсинга и мисматчей; флаг стренда = стренд РНК,
+    а с --reverse-complement (протокол читает реверс-комплемент РНК) он инвертирован
+    во всех бамках сразу: реплики одного эксперимента всегда в одной ориентации.
+  * XS:A всегда совпадает со стрендом выравнивания (флагом 0x10), как у выравнивателя,
+    который не знает о перевороте; переворачивать — задача модуля.
   * Тэги для отладки: XO:Z (known/unknown/singleton), XG:Z (gene_id или '.').
 """
 from __future__ import annotations
@@ -61,9 +62,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("-p", "--prefix", default="sim", help="prefix for all output files")
     p.add_argument("-b", "--n-bams", type=int, default=3, help="number of BAM files")
     p.add_argument("-n", "--n-reads", type=int, default=100_000, help="reads per BAM")
-    p.add_argument("--n-rc-bams", type=int, default=0,
-                   help="how many of the BAMs (the last ones) mimic protocols that read the reverse "
-                        "complement of RNA (strand flags inverted)")
+    p.add_argument("--rc", "--reverse-complement", dest="reverse_complement", action="store_true",
+                   help="the protocol reads the reverse complement of the RNA: strand flags and XS "
+                        "of all reads in all BAMs are inverted relative to the RNA strand")
     p.add_argument("--chrom-length", type=int, default=1_000_000, help="length of each chromosome")
     p.add_argument("--n-chroms", type=int, default=1, help="number of chromosomes")
     p.add_argument("--n-known", type=int, default=100, help="number of known (annotated) genes")
@@ -89,10 +90,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--expr-sigma", type=float, default=1.0, help="sigma of per-gene log expression")
     p.add_argument("--sample-noise-sigma", type=float, default=0.3,
                    help="sigma of per-sample log expression noise")
-    p.add_argument("--xs-mode", choices=["read", "rna"], default="read",
-                   help="XS strand tag: 'read' = alignment strand as written in the BAM (for antisense "
-                        "BAMs it must be flipped together with the flag, like an aligner run without "
-                        "strandness); 'rna' = true RNA strand (like HISAT2 with correct --rna-strandness)")
     p.add_argument("--seed", type=int, default=1337)
     a = p.parse_args()
  
@@ -100,8 +97,6 @@ def parse_args() -> argparse.Namespace:
         p.error("fractions must be in [0, 1]")
     if a.known_frac + a.singleton_frac > 1 + 1e-9:
         p.error("--known-frac + --singleton-frac must be <= 1")
-    if not 0 <= a.n_rc_bams <= a.n_bams:
-        p.error("--n-rc-bams must be between 0 and --n-bams")
     if a.read_length_sd is None:
         a.read_length_sd = max(1.0, 0.1 * a.mean_read_length)
     return a
@@ -232,7 +227,7 @@ def simulate_bam_reads(rng: np.random.Generator, a: argparse.Namespace, genes: l
  
  
 def write_bam(path: str, reads: Reads, chroms: list[str], genome: dict[str, str], sample: str,
-              antisense: bool, xs_mode: Literal["read", "rna"]) -> None:
+              antisense: bool) -> None:
     header = {"HD": {"VN": "1.6", "SO": "coordinate"},
               "SQ": [{"SN": c, "LN": len(genome[c])} for c in chroms],
               "RG": [{"ID": sample, "SM": sample}],
@@ -241,9 +236,8 @@ def write_bam(path: str, reads: Reads, chroms: list[str], genome: dict[str, str]
         for k in range(len(reads["pos"])):
             c = chroms[reads["chrom"][k]]
             p, l = int(reads["pos"][k]), int(reads["len"][k])
-            rna_rev = bool(reads["rev"][k])
-            rev = rna_rev ^ antisense  # alignment strand
-            xs = "-" if (rev if xs_mode == "read" else rna_rev) else "+"
+            rev = bool(reads["rev"][k]) ^ antisense  # alignment strand
+            xs = "-" if rev else "+"
             seg = pysam.AlignedSegment(out.header)
             seg.query_name = f"{sample}_{k:09d}"
             seg.flag = 16 if rev else 0
@@ -282,8 +276,15 @@ def main() -> None:
     with open(f"{pre}.known_genes.gtf", "w") as f:
         for g in genes:
             if g["kind"] == "known":
-                f.write(f'{g["chrom"]}\tsim\tgene\t{g["start"] + 1}\t{g["end"]}\t.\t{g["strand"]}\t.\t'
-                        f'gene_id "{g["id"]}"; gene_name "{g["id"]}"; gene_biotype "simulated";\n')
+                gene_attrs = f'gene_id "{g["id"]}"; gene_name "{g["id"]}"; gene_biotype "simulated";'
+                tx_attrs = (f'gene_id "{g["id"]}"; transcript_id "{g["id"]}.1"; gene_name "{g["id"]}"; '
+                            f'gene_biotype "simulated";')
+                records = (("gene", gene_attrs),
+                           ("transcript", tx_attrs),
+                           ("exon", tx_attrs + ' exon_number "1";'))
+                for feature, attrs in records:
+                    f.write(f'{g["chrom"]}\tsim\t{feature}\t{g["start"] + 1}\t{g["end"]}\t.\t'
+                            f'{g["strand"]}\t.\t{attrs}\n')
     with open(f"{pre}.unknown_genes.bed", "w") as f:
         for g in genes:
             if g["kind"] == "unknown":
@@ -291,12 +292,12 @@ def main() -> None:
  
     all_counts: list[npt.NDArray[np.int_]] = []
     manifest: list[tuple[str, str, str]] = []
+    antisense = a.reverse_complement
     for b in range(a.n_bams):
         sample = f"sample{b + 1:02d}"
-        antisense = b >= a.n_bams - a.n_rc_bams
         reads, counts = simulate_bam_reads(rng, a, genes, chroms, base_expr)
         path = f"{pre}.{sample}.bam"
-        write_bam(path, reads, chroms, genome, sample, antisense, a.xs_mode)
+        write_bam(path, reads, chroms, genome, sample, antisense)
         all_counts.append(counts)
         manifest.append((sample, os.path.basename(path), "antisense" if antisense else "sense"))
         print(f"[{sample}] {len(reads['pos'])} reads "

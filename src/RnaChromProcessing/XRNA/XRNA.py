@@ -36,8 +36,8 @@ class XRNAProcessor(BaseModel):
         if not self.base_dir.exists():
             self.base_dir.mkdir(parents=True)
         os.chdir(self.base_dir)
-        self._work_dir = TemporaryDirectory(dir=self.base_dir)
-        # outout dir
+        self._work_dir = TemporaryDirectory(dir=self.base_dir, delete=False)
+        # output dir
         if not self.output_dir.exists():
             self.output_dir.mkdir(parents=True)
         # other members
@@ -63,7 +63,7 @@ class XRNAProcessor(BaseModel):
     def run(self):
         # run pipeline
         groups = self._preprocessing.run(
-            self.rna_ids,
+            self.file_ids,
             self.annotation,
             self.bam_input_dir, 
             self.filter_ids_input_dir
@@ -74,6 +74,6 @@ class XRNAProcessor(BaseModel):
             self.ouputs_prefix
         )
         # save outputs
-        self._preprocessing.save_outputs(self.output_dir, self.keep_extras)
-        self._pipeline.save_outputs(self.ouputs_prefix, self.output_dir, self.keep_extras)
+        # self._preprocessing.save_outputs(self.output_dir, self.keep_extras)
+        # self._pipeline.save_outputs(self.ouputs_prefix, self.output_dir, self.keep_extras)
         logger.info('Done.')

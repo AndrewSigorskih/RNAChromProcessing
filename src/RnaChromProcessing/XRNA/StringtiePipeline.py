@@ -187,8 +187,8 @@ class StringtiePipeline:
             f'merged intervals, {final_counts} dont overlap with annotation.'
         )
         # cleanup
-        for tmp_file in (raw_bed, nonoverlap_bed, counts_bed):
-            tmp_file.unlink()
+        # for tmp_file in (raw_bed, nonoverlap_bed, counts_bed):
+        #     tmp_file.unlink()
 
     def assign_names(self) -> None:  # TODO remake
         labeller = Labeller()
@@ -243,5 +243,8 @@ class StringtiePipeline:
         self.handle_intervals(annot_info.annot_bed)
         self.assign_names()
         self.closest_gene(annot_info.annot_bed)
+
+        for group in input_groups:
+            logger.debug(group)
         # self.run_stringtie_cov(input_bams)
         # self.make_plots(prefix)

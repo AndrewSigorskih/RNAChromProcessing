@@ -41,7 +41,7 @@ def find_samples_files(
 
 
 def _bam_to_bed(sample: SampleInfo, output: Path) -> int:
-    cmd = f"bedtoold bamtobed -i {sample.files_map['input_bam']} > {output}"
+    cmd = f"bedtools bamtobed -i {sample.files_map['input_bam']} > {output}"
     sample.files_map['bed'] = output
     return_code = run_command(cmd, shell=True)
     return return_code
@@ -61,9 +61,9 @@ def _filter_bed(sample: SampleInfo, annot_bed: Path) -> int:
         return return_code # error will be managed by PoolExecutor
     # process resulting table by chunks
     for chunk in pd.read_csv(
-        counts_file, sep='\t', header=None, usecols=[3, 7], chunksize=CHUNKSIZE
+        counts_file, sep='\t', header=None, usecols=[3, 6], chunksize=CHUNKSIZE
     ):
-        chunk = chunk[chunk[7] == 0][3]
+        chunk = chunk[chunk[6] == 0][3]
         #chunk = '@' + chunk.apply(str)
         chunk.to_csv(sample.files_map['bed_filtered_ids'], header=False, index=False, mode='a')
     #counts_file.unlink() # TODO remove this tmp file
@@ -132,7 +132,7 @@ class XBamFilter:
         annot_inputs = [annot_bed for _ in range(len(samples_list))]
         for sample in samples_list:
             sample.files_map['bed_filtered_ids'] = self.filter_bed / f"{sample.sample_id}.lst"
-        self.executor.run_function(_filter_bed, annot_inputs, samples_list)
+        self.executor.run_function(_filter_bed, samples_list, annot_inputs)
 
 
     def run_filter_ids(self, samples_list: List[SampleInfo]) -> None:
@@ -173,10 +173,12 @@ class XBamFilter:
         samples_list = [
             x for x in annot_info.samples if x.sample_id in file_ids          
         ]
+        logging.debug(annot_info)
         # manage inputs
         find_samples_files(samples_list, bam_input_dir, 'input_bam', '.bam')
         if filter_ids_input_dir:
             find_samples_files(samples_list, filter_ids_input_dir, 'input_filter_lst')
+        logging.debug(samples_list)
         samples_list = [sample for sample in samples_list if 'input_bam' in sample.files_map]
         if not samples_list:
             exit_with_error('No bam files found for provided ids!')

@@ -13,7 +13,7 @@ logger = logging.getLogger()
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-            formatter_class=argparse.RawTextHelpFormatter
+        formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument('-c', '--config', required=True,
                         help='Configuration file.')
