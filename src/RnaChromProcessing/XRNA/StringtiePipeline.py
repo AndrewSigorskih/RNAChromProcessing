@@ -138,7 +138,7 @@ class StringtiePipeline:
             )
         merged_file: Path = self.stringtie_merge / 'merged.gtf'
         self.stringtie_tool.run_stringtie_merge(assembly_lst, merged_file)
-        assembly_lst.unlink()
+        # assembly_lst.unlink()
 
     def handle_intervals(self,
                          bed_annot: Path) -> None:
@@ -231,7 +231,7 @@ class StringtiePipeline:
         tab = tab.set_index('name', drop=True)
         tab.to_csv(xrnas_tab, sep='\t', index=True, header=True)
         # cleanup
-        closest_res.unlink()
+        # closest_res.unlink()
 
 
     def run(self,
@@ -243,8 +243,9 @@ class StringtiePipeline:
         self.handle_intervals(annot_info.annot_bed)
         self.assign_names()
         self.closest_gene(annot_info.annot_bed)
-
+        # TODO remove
         for group in input_groups:
             logger.debug(group)
+        #TODO
         # self.run_stringtie_cov(input_bams)
         # self.make_plots(prefix)

@@ -66,7 +66,7 @@ def _filter_bed(sample: SampleInfo, annot_bed: Path) -> int:
         chunk = chunk[chunk[6] == 0][3]
         #chunk = '@' + chunk.apply(str)
         chunk.to_csv(sample.files_map['bed_filtered_ids'], header=False, index=False, mode='a')
-    #counts_file.unlink() # TODO remove this tmp file
+    #counts_file.unlink()
     return 0
 
 

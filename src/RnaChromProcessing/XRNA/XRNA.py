@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional, Set
@@ -26,7 +27,7 @@ class XRNAProcessor(BaseModel):
 
     annotation: AnnotInfo
     ouputs_prefix: str = 'xrna'
-    keep_extras: Set[str] = set() # TODO maybe remove
+    keep_intermediate: bool = False
 
     stringtie: StringtieTool
 
@@ -37,9 +38,6 @@ class XRNAProcessor(BaseModel):
             self.base_dir.mkdir(parents=True)
         os.chdir(self.base_dir)
         self._work_dir = TemporaryDirectory(dir=self.base_dir, delete=False)
-        # output dir
-        if not self.output_dir.exists():
-            self.output_dir.mkdir(parents=True)
         # other members
         work_pth = Path(self._work_dir.name)
         executor = PoolExecutor(self.cpus)
@@ -74,6 +72,41 @@ class XRNAProcessor(BaseModel):
             self.ouputs_prefix
         )
         # save outputs
-        # self._preprocessing.save_outputs(self.output_dir, self.keep_extras)
-        # self._pipeline.save_outputs(self.ouputs_prefix, self.output_dir, self.keep_extras)
+        collect_outputs(
+            Path(self._work_dir.name),
+            self.output_dir,
+            self.ouputs_prefix,
+            self.keep_intermediate,
+        )
         logger.info('Done.')
+
+
+def _merge_tree(src: Path, dst: Path) -> None:
+    """Copy src into dst, overwriting only files whose relative paths match."""
+    dst.mkdir(parents=True, exist_ok=True)
+    for item in src.rglob("*"):
+        target = dst / item.relative_to(src)
+        if item.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(item, target)
+
+
+def collect_outputs(
+        workdir: Path,
+        output_dir: Path,
+        output_prefix: str,
+        keep_intermediate: bool = False,
+    ) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for suffix in ("bed", "tab"):
+        destination = output_dir / f"{output_prefix}.{suffix}"
+        shutil.copyfile(workdir / "xrna" / f"xrna.{suffix}", destination)
+
+    for subdir in workdir.iterdir():
+        if not subdir.is_dir() or subdir.name == "xrna":
+            continue
+        if keep_intermediate or subdir.name == "plots":
+            _merge_tree(subdir, output_dir / subdir.name)
