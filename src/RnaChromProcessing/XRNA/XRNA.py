@@ -37,7 +37,7 @@ class XRNAProcessor(BaseModel):
         if not self.base_dir.exists():
             self.base_dir.mkdir(parents=True)
         os.chdir(self.base_dir)
-        self._work_dir = TemporaryDirectory(dir=self.base_dir, delete=False)
+        self._work_dir = TemporaryDirectory(dir=self.base_dir, delete=True)
         # other members
         work_pth = Path(self._work_dir.name)
         executor = PoolExecutor(self.cpus)

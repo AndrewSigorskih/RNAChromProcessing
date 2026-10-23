@@ -20,12 +20,6 @@ class SampleInfo:
     true_strand: bool
     files_map: Dict[str, Path] = field(default_factory=dict)
 
-    # TODO remove it ALL
-    fq_file: Optional[Path] = None
-    bed_file: Optional[Path] = None
-    lst_file: Optional[Path] = None
-    bam_file: Optional[Path] = None
-
     def update_field(self,
                      field: str,
                      val: Path) -> None:
