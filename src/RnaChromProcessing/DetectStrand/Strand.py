@@ -25,6 +25,7 @@ CHUNKSIZE = 10_000_000
 
 logger = logging.getLogger()
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
+logging.getLogger('PIL').setLevel(logging.WARNING)
 
 
 def _contacts_to_bed(inp_file: Path, prep_file: Path) -> None:

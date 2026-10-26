@@ -14,6 +14,7 @@ from ..utils.PoolExecutor import PoolExecutor
 
 logger = logging.getLogger()
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
+logging.getLogger('PIL').setLevel(logging.WARNING)
 
 
 class XRNAProcessor(BaseModel):

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Iterable, List, Union
 
 DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
-LOGGING_FORMAT = '%(asctime)s | %(levelname)-8s | %(message)s'
+LOGGING_FORMAT = '%(asctime)s | %(levelname)-8s | %(module)s | %(message)s'
 VERBOSE = 5
 
 logger = logging.getLogger()

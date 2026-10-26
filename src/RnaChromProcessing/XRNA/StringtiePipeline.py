@@ -233,6 +233,16 @@ class StringtiePipeline:
         # cleanup
         # closest_res.unlink()
 
+    def make_plots(self, prefix: str) -> None:
+        xrnas_tab: Path = self.xrna / 'xrna.tab'
+        tab = pd.read_csv(xrnas_tab, sep='\t', index_col=0)
+        set_style_white()
+        plot_length_distribution(tab, self.plots, prefix)
+        plot_distance_to_closest(tab, self.plots, prefix)
+        #TODO
+        # plot_tpm_expressions(tab, self.plots, prefix)
+
+
 
     def run(self,
             input_groups: List[GroupInfo],
@@ -243,9 +253,6 @@ class StringtiePipeline:
         self.handle_intervals(annot_info.annot_bed)
         self.assign_names()
         self.closest_gene(annot_info.annot_bed)
-        # TODO remove
-        for group in input_groups:
-            logger.debug(group)
         #TODO
         # self.run_stringtie_cov(input_bams)
-        # self.make_plots(prefix)
+        self.make_plots(prefix)
