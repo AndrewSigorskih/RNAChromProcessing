@@ -27,7 +27,7 @@ class XRNAProcessor(BaseModel):
     cpus: PositiveInt = 1
 
     annotation: AnnotInfo
-    ouputs_prefix: str = 'xrna'
+    outputs_prefix: str = 'xrna'
     keep_intermediate: bool = False
 
     stringtie: StringtieTool
@@ -70,13 +70,13 @@ class XRNAProcessor(BaseModel):
         self._pipeline.run(
             groups,
             self.annotation,
-            self.ouputs_prefix
+            self.outputs_prefix
         )
         # save outputs
         collect_outputs(
             Path(self._work_dir.name),
             self.output_dir,
-            self.ouputs_prefix,
+            self.outputs_prefix,
             self.keep_intermediate,
         )
         logger.info('Done.')

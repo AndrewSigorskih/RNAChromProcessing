@@ -1,6 +1,6 @@
 bam_input_dir: results/bam
 output_dir: xrnas
-ouputs_prefix: xrna_mouse
+outputs_prefix: xrna_mouse
 cpus: 6
 rna_ids:
 - SRR5035944

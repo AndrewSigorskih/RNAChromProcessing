@@ -1,30 +1,30 @@
 """
-Симуляция входных данных для модуля поиска новых хроматин-ассоциированных РНК.
+A script to simulate input data for the "infer-xrna" module.
  
-Выход (в --outdir, имена с --prefix):
-  {prefix}.known_genes.gtf     разметка "известных" генов (gene + transcript + exon, одноэкзонные) -> вход модуля
-  {prefix}.sampleNN.bam(.bai)  отсортированные и проиндексированные BAM с RNA-ридами -> вход модуля
-  {prefix}.samples.tsv         манифест: бамки и их ориентация (у всех одинаковая)
-  {prefix}.unknown_genes.bed   BED6 с "неизвестными" генами -> только для проверки
-  {prefix}.truth_counts.tsv    все гены + число ридов в каждой бамке -> для проверки
-  {prefix}.genome.fa(.fai)     случайный референс (для IGV / samtools)
+Produced files (written to --outdir, names start with --prefix):
+  {prefix}.known_genes.gtf     "Known genes" annotation, a GTF file with records of types "gene", "transcript", "exon", all single-exon.
+  Pass this as the "gene_annotation" param to infer-xrna.
+  {prefix}.sampleNN.bam(.bai)  Sorted and indexed BAM files, main input for infer-xrna
+  {prefix}.samples.tsv         manifest: Bam files and their strand status (sharing strand status across all bams)
+  {prefix}.unknown_genes.bed   BED6 file of the simulated "unknown" genes coordinates, used as truth source during valudation
+  {prefix}.truth_counts.tsv    Numbers of reads for each gene
+  {prefix}.genome.fa(.fai)     Randomly genberated reference genome
  
-Модель:
-  * Длины генов ~ логнормальное распределение с заданным средним.
-  * Гены одного стренда не перекрываются (с учётом хвоста и --min-gap).
-    "Неизвестные" гены не перекрываются с известными ни на каком стренде
-    (если не задан --allow-antisense), чтобы фильтрация по GTF их не съела.
-  * Покрытие гена: равномерно по телу + "полимеразный след" за 3'-концом:
-    плотность стыкуется с телом и экспоненциально затухает
-    (--readthrough-decay), обрезана на --readthrough-length.
-  * Экспрессия: базовая логнормальная на ген + логнормальный шум на образец.
-  * Синглтоны: равномерно по геному, случайный стренд.
-  * Риды single-end, без сплайсинга и мисматчей; флаг стренда = стренд РНК,
-    а с --reverse-complement (протокол читает реверс-комплемент РНК) он инвертирован
-    во всех бамках сразу: реплики одного эксперимента всегда в одной ориентации.
-  * XS:A всегда совпадает со стрендом выравнивания (флагом 0x10), как у выравнивателя,
-    который не знает о перевороте; переворачивать — задача модуля.
-  * Тэги для отладки: XO:Z (known/unknown/singleton), XG:Z (gene_id или '.').
+Model:
+  * Gene lenght ~ lognormal distrigution with set mean.
+  * Genes on the same strand do not overlap (counting 3' tail and --min-gap).
+    "Unknown" do not overlap known reagrdless of strand (if --allow-antisense is not passed).
+  * Gene coverage: Uniformly over gene body + "polymerase tail" right after 3' end:
+    exponentially decaying dencity
+    (--readthrough-decay), cut at --readthrough-length.
+  * Expression: Base lognormal for each gene + lognormal noise per sample.
+  * Singletons: uniformly over chromosome, random strand.
+  * Reads are single-end, no splicing, no mismatches; strand flag in Bam = RNA strand by default,
+    setting --reverse-complement (sequencing protocol read rev-comp strand) it gets inverted
+    in all Bam files: strand status of all files in a biological replica is always synchronised.
+  * XS:A always matches alignment strand (0x10 flag), since aligner knows nothing about strand inversion,
+    infer-xrna takes care of it.
+  * Debug tags: XO:Z (known/unknown/singleton), XG:Z (gene_id or '.').
 """
 from __future__ import annotations
  

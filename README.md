@@ -29,7 +29,7 @@ After installation it provides access to several command-line tools:
 
 Basic dependencies:
 
-* Python (v 3.9 or higher)
+* Python (v 3.12 or higher)
 * Common unix command-line text-processing utilities: grep, sed, awk, cut, uniq etc.
 
 This package also requires several bioinformatic tools to run.
@@ -56,8 +56,8 @@ cd RNAChrom_ALLvsALL_data_processing
 # set up virtual environment with all bioinformatics tools
 # (provided you use conda as your package manager and have already 
 # installed mamba and/or conda-libmamba-solver in base environment)
-mamba env create -f environment.yml
-conda activate rnachrom-test
+mamba env create -f environment/py312_conda_env.yml
+conda activate rnachromproc_py12
 # install package with all its python dependincies
 pip install .
 ```

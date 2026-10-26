@@ -59,7 +59,7 @@ bam_input_dir|Yes|A path to a directory containing bam input files.
 output_dir|Yes|Path to directory to store results in. Will be created if doesn't exist. Resulting output files and folders will be copied into this path.
 base_dir|No|string. Directory to run analysis in (a temporal directory will be created in this directory). Path should exist if provided. If not provided, current working directory will be used instead.
 cpus|No|int > 0. Number of tasks to run simultaneously on each step. Default is 1.
-ouputs_prefix|No|string. Prefix for main output files and plots. Default value is "xrna".
+outputs_prefix|No|string. Prefix for main output files and plots. Default value is "xrna".
 keep_extras|No|boolean. Whether or not save all intermediate files alongside the main output. Mianly used for debug.
 annotation|Yes|A sub-config containing paths to input annotation files (see below).
 stringtie|No|A sub-config containing information required to run stringtie tool (see below).
@@ -78,5 +78,38 @@ Field name|Required|Description
 tool_path|No|Path to stringtie executable if not available via PATH.
 cpus|No|int > 0. Number of tasks to run simultaneously for all parallel stringtie calls. If not set, the "global" value will be used.
 stringtie_threads|No|int > 0. How many threads stringtie will use **for every** simultaneously-run task. (Value to pass to stringtie's `-p` option). Default is 1.
+
+<a name="outputs"></a>
+## Outputs
+
+All outputs get copied to `output_dir` near the end of the execution.
+
+Main outputs:
+
+* `output_dir / {outputs_prefix}.bed` : BED6 file with coordinates of the inferred transcripts
+
+* `output_dir / {outputs_prefix}.tab` : TSV file with extended information about each transcript.
+
+Columns:
+
+    * name  :   transcript name
+    * chr   :   transcript chromosome
+    * start :   start position
+    * end   :   end position
+    * strand    :   strand
+    * closest_gene_start    :   start position of the closest known gene from the provided annotation
+    * closest_gene_end  :   end position of the closest known gene from the provided annotation
+    * closest_gene_name :   name of the closest known gene from the provided annotation
+    * closest_gene_dist :   distance to the closest known gene from the provided annotation (negative when closest gene side is 3')
+    * closest_gene_side :   which side of the closest gene is closest to this transcript: 5' or 3'
+
+* `output_dir / plots / {outputs_prefix}_length_distr.png`  :   Plot showcasing length distribution of the inferred transcripts
+
+* `output_dir / plots / {outputs_prefix}_closest_gene_distances.png`  :   Plot showcasing distributions of the inferred transcripts within 10KB windows of the closest genes, by closest gene end.
+
+<a name="procedure"></a>
+## Procedure overview
+
+TBD
 
 [Back to top](#head)
