@@ -1,5 +1,4 @@
-bed_input_dir: results/bed
-fq_input_dir: results/trim
+bam_input_dir: results/bam
 output_dir: xrnas
 cpus: 5
 rna_ids:
@@ -10,13 +9,8 @@ rna_ids:
 - SRR9201805
 - SRR9201807
 annotation:
-    gtf_annotation: /gpfs/asigorskikh/data/genes/gencode.vM32.annotation.gtf
+    gene_annotation: /gpfs/asigorskikh/data/genes/gencode.vM32.annotation.gtf
     strand_info: strand/mouse_strand_wins.tsv
-hisat:
-    genome_path: /gpfs/asigorskikh/data/genomes/mm10/mm10
-    known_splice: /gpfs/asigorskikh/data/genes/gencode.vM32.ss
-    hisat_threads: 8
-    cpus: 2
 stringtie:
     stringtie_threads: 8
     cpus: 2
